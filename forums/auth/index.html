@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authentication</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="google-adsense-account" content="ca-pub-9043552187427888" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9043552187427888"
+      crossorigin="anonymous"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <link
+      rel="canonical"
+      href="https://www.ojalkhatiwada.com.np/forums/auth/"
+    />
+    <link rel="icon" type="image/jpeg" href="/favicon.ico" />
+    <link rel="stylesheet" href="/assets/css/style.css" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/apps/" class="nav-link">Apps</a>
+      <a href="/downloads/" class="nav-link">Downloads</a>
+      <a href="/hub/" class="nav-link active">Hub</a>
+    </nav>
+
+    <main style="max-width: 420px">
+      <h2 style="margin-bottom: 0.5rem">Join the Discussion</h2>
+      <p class="tagline">Sign in to access the inner sanctum</p>
+
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          margin-top: 2rem;
+        "
+      >
+        <button id="googleBtn" class="item-card">
+          <i class="fa-brands fa-google"></i> Google
+        </button>
+        <button id="githubBtn" class="item-card">
+          <i class="fa-brands fa-github"></i> GitHub
+        </button>
+      </div>
+
+      <div id="loginToast" class="toast">Authenticated successfully</div>
+    </main>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+        getAuth,
+        signInWithPopup,
+        GoogleAuthProvider,
+        GithubAuthProvider,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+      import { getFirebaseConfig } from "/assets/js/firebase-config.js";
+
+      const firebaseConfig = getFirebaseConfig();
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const toast = document.getElementById("loginToast");
+
+      const showToast = (message) => {
+        toast.textContent = message;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 3000);
+      };
+
+      // Handle existing sessions
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          showToast(`Welcome back, ${user.displayName}`);
+          // Delay slightly so they can actually read the welcome message
+          setTimeout(() => {
+            window.location.href = "/hub/";
+          }, 800);
+        }
+      });
+
+      const login = async (ProviderClass) => {
+        try {
+          const provider = new ProviderClass();
+          provider.setCustomParameters({ prompt: "select_account" });
+          await signInWithPopup(auth, provider);
+          // onAuthStateChanged will handle the redirect automatically
+        } catch (err) {
+          console.error("Auth error:", err?.code || "unknown");
+          showToast("Authentication failed. Please try again.");
+        }
+      };
+
+      document.getElementById("googleBtn").onclick = () =>
+        login(GoogleAuthProvider);
+      document.getElementById("githubBtn").onclick = () =>
+        login(GithubAuthProvider);
+    </script>
+  </body>
+</html>

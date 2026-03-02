@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hub</title>
+    <meta name="robots" content="index, follow" />
+    <meta name="google-adsense-account" content="ca-pub-9043552187427888" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9043552187427888"
+      crossorigin="anonymous"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <link rel="canonical" href="https://www.ojalkhatiwada.com.np/hub/" />
+    <link rel="stylesheet" href="/assets/css/style.css" />
+    <link rel="icon" type="image/jpeg" href="/favicon.ico" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/apps/" class="nav-link">Apps</a>
+      <a href="/downloads/" class="nav-link">Downloads</a>
+      <a href="/hub/" class="nav-link active">Hub</a>
+    </nav>
+
+    <main style="max-width: 600px !important">
+      <header style="margin-bottom: 1.5rem">
+        <h1>Community Hub</h1>
+        <div id="user_info">
+          <img id="user_avatar" class="profile-pic" style="display: none" />
+          <span
+            id="user_display"
+            style="color: var(--green); font-weight: 600"
+          ></span>
+          <a
+            id="loginBtn"
+            href="/forums/auth/"
+            class="tab-btn"
+            style="color: var(--sky); padding: 4px 8px; text-decoration: none"
+          >
+            [login]
+          </a>
+          <button
+            id="logoutBtn"
+            class="tab-btn"
+            style="color: var(--mauve); padding: 4px 8px"
+          >
+            [exit]
+          </button>
+        </div>
+      </header>
+
+      <div class="search-wrapper">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input
+          type="text"
+          id="global_search"
+          placeholder="Search discussions or bug IDs..."
+        />
+      </div>
+
+      <div class="tabs">
+        <button
+          type="button"
+          class="tab-btn active"
+          onclick="showPage(event, 'discussion')"
+        >
+          Discussion
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          onclick="showPage(event, 'bug-tracker')"
+        >
+          Bug Tracker
+        </button>
+      </div>
+
+      <section id="discussion" class="page active">
+        <div id="post_editor" style="margin-bottom: 2rem">
+          <textarea
+            id="post_input"
+            placeholder="What's the word on the street?"
+            style="min-height: 100px"
+          ></textarea>
+          <div
+            style="display: flex; justify-content: flex-end; margin-top: 1rem"
+          >
+            <button id="submit_post">
+              <i class="fa-solid fa-paper-plane" style="margin-right: 8px"></i
+              >Transmit
+            </button>
+          </div>
+        </div>
+        <div id="posts_loading" class="tagline">
+          Intercepting data packets...
+        </div>
+        <div id="posts_list" class="grid"></div>
+      </section>
+
+      <section id="bug-tracker" class="page">
+        <div class="grid" style="margin-bottom: 2rem">
+          <input
+            type="text"
+            id="bug_title"
+            placeholder="Bug summary | Project"
+          />
+          <textarea
+            id="bug_desc"
+            placeholder="Steps to reproduce..."
+            style="min-height: 80px"
+          ></textarea>
+          <div
+            style="display: flex; justify-content: flex-end; margin-top: 1rem"
+          >
+            <button id="submit_bug">
+              <i class="fa-solid fa-bug" style="margin-right: 8px"></i>Report
+            </button>
+          </div>
+        </div>
+        <div id="bugs_list" class="grid"></div>
+      </section>
+
+      <p id="copy-toast" class="toast"></p>
+    </main>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        onSnapshot,
+        query,
+        orderBy,
+        serverTimestamp,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+      import { getFirebaseConfig } from "/assets/js/firebase-config.js";
+
+      const firebaseConfig = getFirebaseConfig();
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      const postsCol = collection(db, "posts");
+      const bugsCol = collection(db, "bugs");
+      const MAX_POST_LENGTH = 1200;
+      const MAX_BUG_TITLE_LENGTH = 120;
+      const MAX_BUG_DESC_LENGTH = 2400;
+      const avatarHostAllowlist = new Set([
+        "lh3.googleusercontent.com",
+        "avatars.githubusercontent.com",
+        "ui-avatars.com",
+      ]);
+
+      let allPosts = [];
+      let allBugs = [];
+
+      const escapeHTML = (str) =>
+        String(str || "").replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[m],
+        );
+      const normalizeText = (value, max) =>
+        String(value || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, max);
+
+      const safeDate = (value) => {
+        try {
+          return value?.toDate?.().toLocaleDateString() || "Just now";
+        } catch {
+          return "Just now";
+        }
+      };
+
+      const sanitizeAvatarUrl = (rawValue, fallbackUrl) => {
+        const raw = String(rawValue || "").trim();
+        if (!raw) return fallbackUrl;
+        try {
+          const parsed = new URL(raw);
+          if (parsed.protocol !== "https:") return fallbackUrl;
+          if (!avatarHostAllowlist.has(parsed.hostname)) return fallbackUrl;
+          return parsed.toString();
+        } catch {
+          return fallbackUrl;
+        }
+      };
+
+      window.showPage = (event, pageId) => {
+        document
+          .querySelectorAll(".page")
+          .forEach((p) => p.classList.remove("active"));
+        document
+          .querySelectorAll(".tab-btn")
+          .forEach((b) => b.classList.remove("active"));
+        document.getElementById(pageId).classList.add("active");
+        event.currentTarget.classList.add("active");
+      };
+
+      const showToast = (msg) => {
+        const t = document.getElementById("copy-toast");
+        t.innerText = msg;
+        t.classList.add("show");
+        setTimeout(() => t.classList.remove("show"), 3000);
+      };
+
+      const setComposerState = (canPost) => {
+        const postInput = document.getElementById("post_input");
+        const submitPost = document.getElementById("submit_post");
+        const bugTitle = document.getElementById("bug_title");
+        const bugDesc = document.getElementById("bug_desc");
+        const submitBug = document.getElementById("submit_bug");
+
+        postInput.disabled = !canPost;
+        submitPost.disabled = !canPost;
+        bugTitle.disabled = !canPost;
+        bugDesc.disabled = !canPost;
+        submitBug.disabled = !canPost;
+
+        if (!canPost) {
+          postInput.placeholder = "Log in to post a discussion.";
+          bugTitle.placeholder = "Log in to report bugs.";
+          bugDesc.placeholder = "Log in to report bugs.";
+        } else {
+          postInput.placeholder = "What's the word on the street?";
+          bugTitle.placeholder = "Bug summary | Project";
+          bugDesc.placeholder = "Steps to reproduce...";
+        }
+      };
+
+      onAuthStateChanged(auth, (user) => {
+        const loginBtn = document.getElementById("loginBtn");
+        const logoutBtn = document.getElementById("logoutBtn");
+        if (!user) {
+          document.getElementById("user_display").textContent = "Guest";
+          document.getElementById("user_avatar").style.display = "none";
+          loginBtn.style.display = "inline-flex";
+          logoutBtn.style.display = "none";
+          setComposerState(false);
+          document.getElementById("posts_loading").style.display = "none";
+          return;
+        }
+        const av = document.getElementById("user_avatar");
+        const display = document.getElementById("user_display");
+        display.textContent = user.displayName || "Anonymous Hacker";
+        const fallbackPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || "U")}&background=1e1e2e&color=a6e3a1`;
+        av.src = sanitizeAvatarUrl(user.photoURL, fallbackPhoto);
+        av.style.display = "block";
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "inline-flex";
+        setComposerState(true);
+        document.getElementById("posts_loading").style.display = "none";
+      });
+
+      document.getElementById("logoutBtn").onclick = () => signOut(auth);
+
+      const filterAndRender = () => {
+        const term = document
+          .getElementById("global_search")
+          .value.toLowerCase();
+
+        const fPosts = allPosts.filter(
+          (p) =>
+            (p.content || "").toLowerCase().includes(term) ||
+            (p.username || "").toLowerCase().includes(term),
+        );
+
+        document.getElementById("posts_list").innerHTML = fPosts
+          .map((p) => {
+            const fallbackPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.username || "U")}&background=1e1e2e&color=89b4fa`;
+            const userPhoto = sanitizeAvatarUrl(p.photoURL, fallbackPhoto);
+            return `
+            <div class="post-card">
+              <div class="post-header">
+                <img src="${escapeHTML(userPhoto)}" class="avatar-sm">
+                <strong style="color: var(--sky);">${escapeHTML(p.username || "Unknown")}</strong>
+                <small style="margin-left: auto; color: var(--subtext0);">${safeDate(p.createdAt)}</small>
+              </div>
+              <div class="post-content">${escapeHTML(p.content)}</div>
+            </div>`;
+          })
+          .join("");
+
+        const fBugs = allBugs.filter(
+          (b) =>
+            (b.title || "").toLowerCase().includes(term) ||
+            (b.description || "").toLowerCase().includes(term) ||
+            (b.id || "").toLowerCase().includes(term),
+        );
+
+        document.getElementById("bugs_list").innerHTML = fBugs
+          .map(
+            (b) => `
+          <div class="post-card bug">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="bug-id">#BUG-${b.id.substring(0, 6).toUpperCase()}</span>
+              <span class="status-badge">${(b.status || "open").toUpperCase()}</span>
+            </div>
+            <h3 style="margin: 10px 0 5px 0; font-size: 1rem; color: var(--text);">${escapeHTML(b.title)}</h3>
+            <p style="font-size: 0.85rem; color: var(--subtext0);">${escapeHTML(b.description)}</p>
+          </div>`,
+          )
+          .join("");
+      };
+
+      onSnapshot(query(postsCol, orderBy("createdAt", "desc")), (snap) => {
+        allPosts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        filterAndRender();
+      });
+
+      onSnapshot(query(bugsCol, orderBy("createdAt", "desc")), (snap) => {
+        allBugs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        filterAndRender();
+      });
+
+      document.getElementById("global_search").oninput = filterAndRender;
+
+      document.getElementById("submit_post").onclick = async () => {
+        const postInput = document.getElementById("post_input");
+        const content = normalizeText(postInput.value, MAX_POST_LENGTH);
+        if (content && auth.currentUser) {
+          try {
+            await addDoc(postsCol, {
+              content,
+              username: normalizeText(auth.currentUser.displayName, 80) || "User",
+              photoURL: sanitizeAvatarUrl(auth.currentUser.photoURL, ""),
+              uid: auth.currentUser.uid,
+              createdAt: serverTimestamp(),
+            });
+            postInput.value = "";
+          } catch (e) {
+            showToast("Transmission failed: Access denied.");
+          }
+        } else if (!content) {
+          showToast("Post is empty or too long.");
+        } else {
+          showToast("Log in to post in discussions.");
+        }
+      };
+
+      document.getElementById("submit_bug").onclick = async () => {
+        const t = document.getElementById("bug_title"),
+          d = document.getElementById("bug_desc");
+        const bugTitle = normalizeText(t.value, MAX_BUG_TITLE_LENGTH);
+        const bugDesc = normalizeText(d.value, MAX_BUG_DESC_LENGTH);
+        if (bugTitle && bugDesc && auth.currentUser) {
+          try {
+            await addDoc(bugsCol, {
+              title: bugTitle,
+              description: bugDesc,
+              username: normalizeText(auth.currentUser.displayName, 80) || "User",
+              uid: auth.currentUser.uid,
+              status: "open",
+              createdAt: serverTimestamp(),
+            });
+            t.value = "";
+            d.value = "";
+            showToast("Bug logged. Happy hunting.");
+          } catch (e) {
+            showToast("Report failed: Access denied.");
+          }
+        } else if (!bugTitle || !bugDesc) {
+          showToast("Bug title or description is invalid.");
+        } else {
+          showToast("Log in to report bugs.");
+        }
+      };
+    </script>
+  </body>
+</html>

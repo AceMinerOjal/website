@@ -1,0 +1,9 @@
+/apps.html /apps/ 301
+/downloads.html /downloads/ 301
+/hub.html /hub/ 301
+/forums/auth.html /forums/auth/ 301
+/webApps/dot-dat-plotter.html /web-apps/dot-dat-plotter/ 301
+/webApps/* /web-apps/:splat 301
+/download-files/example.dat /downloads/files/example.dat 301
+/style.css /assets/css/style.css 301
+/assets/firebase-config.js /assets/js/firebase-config.js 301

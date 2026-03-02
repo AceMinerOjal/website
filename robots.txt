@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /forums/auth/
+Sitemap: https://www.ojalkhatiwada.com.np/sitemap.xml

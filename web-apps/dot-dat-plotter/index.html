@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Universal .dat Plotter</title>
+    <meta name="robots" content="index, follow" />
+    <meta name="google-adsense-account" content="ca-pub-9043552187427888" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9043552187427888"
+      crossorigin="anonymous"
+    ></script>
+
+    <link rel="stylesheet" href="/assets/css/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+    <link
+      rel="canonical"
+      href="https://www.ojalkhatiwada.com.np/web-apps/dot-dat-plotter/"
+    />
+    <link rel="icon" type="image/jpeg" href="/favicon.ico" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  </head>
+  <body>
+    <div class="top-nav">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/apps/" class="nav-link active">Apps</a>
+      <a href="/downloads/" class="nav-link">Downloads</a>
+      <a href="/hub/" class="nav-link">Hub</a>
+    </div>
+
+    <main class="plotter-card">
+      <h1>Data Visualiser</h1>
+      <p class="tagline">Drop your .dat files to generate a plot</p>
+
+      <div id="drop-zone" class="drop-zone">
+        <i class="fas fa-file-upload"></i>
+        <span>Drag & Drop your .dat file here or click to select</span>
+      </div>
+
+      <input type="file" id="fileInput" hidden accept=".dat,.txt,.csv" />
+
+      <div class="controls">
+        <button class="btn" id="logToggle">
+          <i class="fas fa-chart-line"></i> Toggle Log Scale
+        </button>
+        <button class="btn" id="exportPNG">
+          <i class="fas fa-download"></i> Export PNG
+        </button>
+      </div>
+
+      <div class="chart-container">
+        <canvas id="universalChart"></canvas>
+      </div>
+    </main>
+
+    <script>
+      const dropZone = document.getElementById("drop-zone");
+      const fileInput = document.getElementById("fileInput");
+      const logToggle = document.getElementById("logToggle");
+      const exportPNG = document.getElementById("exportPNG");
+
+      let chart;
+      let currentScale = "linear";
+
+      dropZone.onclick = () => fileInput.click();
+      dropZone.ondragover = (e) => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+      };
+      dropZone.ondragleave = () => dropZone.classList.remove("dragover");
+      dropZone.ondrop = (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        handleFile(e.dataTransfer.files[0]);
+      };
+      fileInput.onchange = (e) => handleFile(e.target.files[0]);
+
+      function handleFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const lines = e.target.result.trim().split("\n");
+          processData(lines);
+        };
+        reader.readAsText(file);
+      }
+
+      function processData(lines) {
+        const splitData = lines
+          .map((line) => line.trim().split(/[\s,]+/))
+          .filter((row) => row.length > 0);
+
+        const hasHeader = splitData[0].some((value) => isNaN(Number(value)));
+
+        const headers = hasHeader
+          ? splitData[0]
+          : splitData[0].map((_, i) => `Column ${i}`);
+
+        const numericData = (hasHeader ? splitData.slice(1) : splitData)
+          .map((row) => row.map(Number))
+          .filter((row) => !row.some(isNaN));
+
+        if (numericData.length === 0) return;
+
+        const css = getComputedStyle(document.documentElement);
+        const colors = [
+          css.getPropertyValue("--green").trim(),
+          css.getPropertyValue("--teal").trim(),
+          css.getPropertyValue("--sky").trim(),
+          css.getPropertyValue("--mauve").trim(),
+          css.getPropertyValue("--text").trim(),
+          css.getPropertyValue("--subtext0").trim(),
+        ];
+
+        const startCol = headers.length === 1 ? 0 : 1;
+
+        const datasets = [];
+        for (let i = startCol; i < headers.length; i++) {
+          datasets.push({
+            label: headers[i],
+            data: numericData.map((row, rowIdx) => ({
+              x: headers.length === 1 ? rowIdx : row[0],
+              y: headers.length === 1 ? row[0] : row[i],
+            })),
+            borderColor: colors[(i - startCol) % colors.length],
+            backgroundColor: colors[(i - startCol) % colors.length],
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+          });
+        }
+
+        render(datasets, headers, startCol);
+      }
+
+      function render(datasets, headers, startCol) {
+        if (chart) chart.destroy();
+
+        const ctx = document.getElementById("universalChart").getContext("2d");
+        const css = getComputedStyle(document.documentElement);
+        const getColor = (prop) =>
+          css.getPropertyValue(prop).trim() || "#a6adc8";
+
+        chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: datasets,
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+              x: {
+                type: "linear",
+                title: {
+                  display: true,
+                  text: headers.length > 1 ? headers[0] : "Index",
+                  color: getColor("--text"),
+                  /* Explicitly setting monospace for chart text */
+                  font: { family: "'JetBrains Mono', monospace" },
+                },
+                grid: { color: getColor("--surface0") },
+                ticks: {
+                  color: getColor("--subtext0"),
+                  font: { family: "'JetBrains Mono', monospace" },
+                },
+              },
+              y: {
+                type: currentScale,
+                title: {
+                  display: true,
+                  text: datasets.length > 1 ? "Value" : headers[startCol],
+                  color: getColor("--text"),
+                  font: { family: "'JetBrains Mono', monospace" },
+                },
+                grid: { color: getColor("--surface0") },
+                ticks: {
+                  color: getColor("--subtext0"),
+                  font: { family: "'JetBrains Mono', monospace" },
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                labels: {
+                  color: getColor("--text"),
+                  font: {
+                    family: "'JetBrains Mono', monospace",
+                    weight: "600",
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      logToggle.onclick = () => {
+        currentScale = currentScale === "linear" ? "logarithmic" : "linear";
+        if (chart) {
+          chart.options.scales.y.type = currentScale;
+          chart.update();
+        }
+      };
+
+      exportPNG.onclick = () => {
+        if (!chart) return;
+        const link = document.createElement("a");
+        link.download = "plot.png";
+        link.href = chart.toBase64Image();
+        link.click();
+      };
+    </script>
+  </body>
+</html>
