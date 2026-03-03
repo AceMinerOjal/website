@@ -59,7 +59,7 @@
         <input
           type="text"
           id="global_search"
-          placeholder="Search discussions or bug IDs..."
+          placeholder="Search threads or bug IDs..."
         />
       </div>
 
@@ -82,17 +82,23 @@
 
       <section id="discussion" class="page active">
         <div id="post_editor" style="margin-bottom: 2rem">
+          <input
+            id="thread_title"
+            type="text"
+            placeholder="Thread title"
+            maxlength="120"
+          />
           <textarea
-            id="post_input"
-            placeholder="What's the word on the street?"
-            style="min-height: 100px"
+            id="thread_input"
+            placeholder="Open a thread with context, question, or proposal..."
+            style="min-height: 120px; margin-top: 0.75rem"
           ></textarea>
           <div
             style="display: flex; justify-content: flex-end; margin-top: 1rem"
           >
-            <button id="submit_post">
+            <button id="submit_thread">
               <i class="fa-solid fa-paper-plane" style="margin-right: 8px"></i
-              >Transmit
+              >Start Thread
             </button>
           </div>
         </div>
@@ -153,7 +159,9 @@
       const db = getFirestore(app);
       const postsCol = collection(db, "posts");
       const bugsCol = collection(db, "bugs");
-      const MAX_POST_LENGTH = 1200;
+      const MAX_THREAD_TITLE_LENGTH = 120;
+      const MAX_THREAD_BODY_LENGTH = 2400;
+      const MAX_REPLY_LENGTH = 1200;
       const MAX_BUG_TITLE_LENGTH = 120;
       const MAX_BUG_DESC_LENGTH = 2400;
       const avatarHostAllowlist = new Set([
@@ -162,8 +170,25 @@
         "ui-avatars.com",
       ]);
 
-      let allPosts = [];
+      let allDiscussionDocs = [];
       let allBugs = [];
+      const ui = {
+        userDisplay: document.getElementById("user_display"),
+        userAvatar: document.getElementById("user_avatar"),
+        loginBtn: document.getElementById("loginBtn"),
+        logoutBtn: document.getElementById("logoutBtn"),
+        globalSearch: document.getElementById("global_search"),
+        threadTitle: document.getElementById("thread_title"),
+        threadInput: document.getElementById("thread_input"),
+        submitThread: document.getElementById("submit_thread"),
+        postsLoading: document.getElementById("posts_loading"),
+        postsList: document.getElementById("posts_list"),
+        bugTitle: document.getElementById("bug_title"),
+        bugDesc: document.getElementById("bug_desc"),
+        submitBug: document.getElementById("submit_bug"),
+        bugsList: document.getElementById("bugs_list"),
+        toast: document.getElementById("copy-toast"),
+      };
 
       const escapeHTML = (str) =>
         String(str || "").replace(
@@ -190,6 +215,10 @@
           return "Just now";
         }
       };
+      const getFallbackAvatar = (name, color) =>
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(name || "U")}&background=1e1e2e&color=${color}`;
+      const escapeSelector = (value) =>
+        window.CSS?.escape ? window.CSS.escape(value) : String(value);
 
       const sanitizeAvatarUrl = (rawValue, fallbackUrl) => {
         const raw = String(rawValue || "").trim();
@@ -216,88 +245,174 @@
       };
 
       const showToast = (msg) => {
-        const t = document.getElementById("copy-toast");
-        t.innerText = msg;
-        t.classList.add("show");
-        setTimeout(() => t.classList.remove("show"), 3000);
+        ui.toast.innerText = msg;
+        ui.toast.classList.add("show");
+        setTimeout(() => ui.toast.classList.remove("show"), 3000);
+      };
+
+      const timestampToNumber = (value) => {
+        if (!value) return 0;
+        if (typeof value.seconds === "number") {
+          return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+        }
+        try {
+          return value.toDate().getTime();
+        } catch {
+          return 0;
+        }
+      };
+
+      const buildThreadList = (docs) => {
+        const roots = docs
+          .filter((item) => !item.parentId)
+          .map((item) => ({ ...item, replies: [] }));
+        const rootMap = new Map(roots.map((root) => [root.id, root]));
+
+        docs
+          .filter((item) => item.parentId)
+          .forEach((reply) => {
+            const parent = rootMap.get(reply.parentId);
+            if (parent) parent.replies.push(reply);
+          });
+
+        roots.sort(
+          (a, b) => timestampToNumber(b.createdAt) - timestampToNumber(a.createdAt),
+        );
+        roots.forEach((root) => {
+          root.replies.sort(
+            (a, b) => timestampToNumber(a.createdAt) - timestampToNumber(b.createdAt),
+          );
+        });
+        return roots;
       };
 
       const setComposerState = (canPost) => {
-        const postInput = document.getElementById("post_input");
-        const submitPost = document.getElementById("submit_post");
-        const bugTitle = document.getElementById("bug_title");
-        const bugDesc = document.getElementById("bug_desc");
-        const submitBug = document.getElementById("submit_bug");
-
-        postInput.disabled = !canPost;
-        submitPost.disabled = !canPost;
-        bugTitle.disabled = !canPost;
-        bugDesc.disabled = !canPost;
-        submitBug.disabled = !canPost;
+        ui.threadTitle.disabled = !canPost;
+        ui.threadInput.disabled = !canPost;
+        ui.submitThread.disabled = !canPost;
+        ui.bugTitle.disabled = !canPost;
+        ui.bugDesc.disabled = !canPost;
+        ui.submitBug.disabled = !canPost;
 
         if (!canPost) {
-          postInput.placeholder = "Log in to post a discussion.";
-          bugTitle.placeholder = "Log in to report bugs.";
-          bugDesc.placeholder = "Log in to report bugs.";
+          ui.threadTitle.placeholder = "Log in to start a thread.";
+          ui.threadInput.placeholder = "Log in to start a thread.";
+          ui.bugTitle.placeholder = "Log in to report bugs.";
+          ui.bugDesc.placeholder = "Log in to report bugs.";
         } else {
-          postInput.placeholder = "What's the word on the street?";
-          bugTitle.placeholder = "Bug summary | Project";
-          bugDesc.placeholder = "Steps to reproduce...";
+          ui.threadTitle.placeholder = "Thread title";
+          ui.threadInput.placeholder =
+            "Open a thread with context, question, or proposal...";
+          ui.bugTitle.placeholder = "Bug summary | Project";
+          ui.bugDesc.placeholder = "Steps to reproduce...";
         }
       };
 
       onAuthStateChanged(auth, (user) => {
-        const loginBtn = document.getElementById("loginBtn");
-        const logoutBtn = document.getElementById("logoutBtn");
         if (!user) {
-          document.getElementById("user_display").textContent = "Guest";
-          document.getElementById("user_avatar").style.display = "none";
-          loginBtn.style.display = "inline-flex";
-          logoutBtn.style.display = "none";
+          ui.userDisplay.textContent = "Guest";
+          ui.userAvatar.style.display = "none";
+          ui.loginBtn.style.display = "inline-flex";
+          ui.logoutBtn.style.display = "none";
           setComposerState(false);
-          document.getElementById("posts_loading").style.display = "none";
+          ui.postsLoading.style.display = "none";
+          filterAndRender();
           return;
         }
-        const av = document.getElementById("user_avatar");
-        const display = document.getElementById("user_display");
-        display.textContent = user.displayName || "Anonymous Hacker";
-        const fallbackPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || "U")}&background=1e1e2e&color=a6e3a1`;
-        av.src = sanitizeAvatarUrl(user.photoURL, fallbackPhoto);
-        av.style.display = "block";
-        loginBtn.style.display = "none";
-        logoutBtn.style.display = "inline-flex";
+        ui.userDisplay.textContent = user.displayName || "Anonymous Hacker";
+        ui.userAvatar.src = sanitizeAvatarUrl(
+          user.photoURL,
+          getFallbackAvatar(user.displayName, "a6e3a1"),
+        );
+        ui.userAvatar.style.display = "block";
+        ui.loginBtn.style.display = "none";
+        ui.logoutBtn.style.display = "inline-flex";
         setComposerState(true);
-        document.getElementById("posts_loading").style.display = "none";
+        ui.postsLoading.style.display = "none";
+        filterAndRender();
       });
 
-      document.getElementById("logoutBtn").onclick = () => signOut(auth);
+      ui.logoutBtn.onclick = () => signOut(auth);
+
+      const renderReply = (reply) => {
+        const replyPhoto = sanitizeAvatarUrl(
+          reply.photoURL,
+          getFallbackAvatar(reply.username, "94e2d5"),
+        );
+        return `
+          <div class="thread-reply">
+            <div class="post-header thread-reply-header">
+              <img src="${escapeHTML(replyPhoto)}" class="avatar-sm">
+              <strong style="color: var(--teal);">${escapeHTML(reply.username || "Unknown")}</strong>
+              <small style="margin-left: auto; color: var(--subtext0);">${safeDate(reply.createdAt)}</small>
+            </div>
+            <div class="post-content">${escapeHTML(reply.content)}</div>
+          </div>`;
+      };
+
+      const renderThread = (thread, canReply) => {
+        const userPhoto = sanitizeAvatarUrl(
+          thread.photoURL,
+          getFallbackAvatar(thread.username, "89b4fa"),
+        );
+        const threadTitle = normalizeText(thread.title, MAX_THREAD_TITLE_LENGTH);
+        const replies = thread.replies.map(renderReply).join("");
+        const threadId = escapeHTML(thread.id);
+        return `
+          <article class="post-card thread-root" data-thread-id="${threadId}">
+            <div class="post-header">
+              <img src="${escapeHTML(userPhoto)}" class="avatar-sm">
+              <strong style="color: var(--sky);">${escapeHTML(thread.username || "Unknown")}</strong>
+              <small style="margin-left: auto; color: var(--subtext0);">${safeDate(thread.createdAt)}</small>
+            </div>
+            <h3 class="thread-title">${escapeHTML(threadTitle || "Untitled Thread")}</h3>
+            <div class="post-content">${escapeHTML(thread.content || "")}</div>
+            <div class="thread-meta">
+              <span>${thread.replies.length} repl${thread.replies.length === 1 ? "y" : "ies"}</span>
+              <button type="button" class="thread-reply-toggle" data-thread-id="${threadId}">Reply</button>
+            </div>
+            <div class="thread-replies">${replies || '<p class="tagline">No replies yet.</p>'}</div>
+            <div class="reply-editor" data-thread-id="${threadId}" hidden>
+              <textarea class="thread-reply-input" placeholder="${canReply ? "Reply to this thread..." : "Log in to reply."}" ${canReply ? "" : "disabled"}></textarea>
+              <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem">
+                <button type="button" class="thread-reply-submit" data-thread-id="${threadId}" ${canReply ? "" : "disabled"}>Send Reply</button>
+              </div>
+            </div>
+          </article>`;
+      };
+
+      const renderBug = (bug) => `
+          <div class="post-card bug">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="bug-id">#BUG-${bug.id.substring(0, 6).toUpperCase()}</span>
+              <span class="status-badge">${(bug.status || "open").toUpperCase()}</span>
+            </div>
+            <h3 style="margin: 10px 0 5px 0; font-size: 1rem; color: var(--text);">${escapeHTML(bug.title)}</h3>
+            <p style="font-size: 0.85rem; color: var(--subtext0);">${escapeHTML(bug.description)}</p>
+          </div>`;
 
       const filterAndRender = () => {
-        const term = document
-          .getElementById("global_search")
-          .value.toLowerCase();
+        const term = ui.globalSearch.value.toLowerCase();
+        const canReply = Boolean(auth.currentUser);
+        const threads = buildThreadList(allDiscussionDocs).filter((thread) => {
+          if (!term) return true;
+          const rootMatches =
+            (thread.title || "").toLowerCase().includes(term) ||
+            (thread.content || "").toLowerCase().includes(term) ||
+            (thread.username || "").toLowerCase().includes(term);
+          if (rootMatches) return true;
+          return thread.replies.some(
+            (reply) =>
+              (reply.content || "").toLowerCase().includes(term) ||
+              (reply.username || "").toLowerCase().includes(term),
+          );
+        });
 
-        const fPosts = allPosts.filter(
-          (p) =>
-            (p.content || "").toLowerCase().includes(term) ||
-            (p.username || "").toLowerCase().includes(term),
-        );
-
-        document.getElementById("posts_list").innerHTML = fPosts
-          .map((p) => {
-            const fallbackPhoto = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.username || "U")}&background=1e1e2e&color=89b4fa`;
-            const userPhoto = sanitizeAvatarUrl(p.photoURL, fallbackPhoto);
-            return `
-            <div class="post-card">
-              <div class="post-header">
-                <img src="${escapeHTML(userPhoto)}" class="avatar-sm">
-                <strong style="color: var(--sky);">${escapeHTML(p.username || "Unknown")}</strong>
-                <small style="margin-left: auto; color: var(--subtext0);">${safeDate(p.createdAt)}</small>
-              </div>
-              <div class="post-content">${escapeHTML(p.content)}</div>
-            </div>`;
-          })
-          .join("");
+        ui.postsList.innerHTML = threads.length
+          ? threads
+              .map((thread) => renderThread(thread, canReply))
+              .join("")
+          : '<p class="tagline">No threads found.</p>';
 
         const fBugs = allBugs.filter(
           (b) =>
@@ -306,23 +421,11 @@
             (b.id || "").toLowerCase().includes(term),
         );
 
-        document.getElementById("bugs_list").innerHTML = fBugs
-          .map(
-            (b) => `
-          <div class="post-card bug">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span class="bug-id">#BUG-${b.id.substring(0, 6).toUpperCase()}</span>
-              <span class="status-badge">${(b.status || "open").toUpperCase()}</span>
-            </div>
-            <h3 style="margin: 10px 0 5px 0; font-size: 1rem; color: var(--text);">${escapeHTML(b.title)}</h3>
-            <p style="font-size: 0.85rem; color: var(--subtext0);">${escapeHTML(b.description)}</p>
-          </div>`,
-          )
-          .join("");
+        ui.bugsList.innerHTML = fBugs.map(renderBug).join("");
       };
 
       onSnapshot(query(postsCol, orderBy("createdAt", "desc")), (snap) => {
-        allPosts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        allDiscussionDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         filterAndRender();
       });
 
@@ -331,36 +434,93 @@
         filterAndRender();
       });
 
-      document.getElementById("global_search").oninput = filterAndRender;
+      ui.globalSearch.oninput = filterAndRender;
 
-      document.getElementById("submit_post").onclick = async () => {
-        const postInput = document.getElementById("post_input");
-        const content = normalizeText(postInput.value, MAX_POST_LENGTH);
-        if (content && auth.currentUser) {
+      ui.submitThread.onclick = async () => {
+        const title = normalizeText(ui.threadTitle.value, MAX_THREAD_TITLE_LENGTH);
+        const content = normalizeText(ui.threadInput.value, MAX_THREAD_BODY_LENGTH);
+        if (title && content && auth.currentUser) {
           try {
             await addDoc(postsCol, {
+              type: "thread",
+              parentId: null,
+              title,
               content,
               username: normalizeText(auth.currentUser.displayName, 80) || "User",
               photoURL: sanitizeAvatarUrl(auth.currentUser.photoURL, ""),
               uid: auth.currentUser.uid,
               createdAt: serverTimestamp(),
             });
-            postInput.value = "";
+            ui.threadTitle.value = "";
+            ui.threadInput.value = "";
           } catch (e) {
             showToast("Transmission failed: Access denied.");
           }
-        } else if (!content) {
-          showToast("Post is empty or too long.");
+        } else if (!title || !content) {
+          showToast("Thread title or body is invalid.");
         } else {
-          showToast("Log in to post in discussions.");
+          showToast("Log in to start a thread.");
         }
       };
 
-      document.getElementById("submit_bug").onclick = async () => {
-        const t = document.getElementById("bug_title"),
-          d = document.getElementById("bug_desc");
-        const bugTitle = normalizeText(t.value, MAX_BUG_TITLE_LENGTH);
-        const bugDesc = normalizeText(d.value, MAX_BUG_DESC_LENGTH);
+      ui.postsList.onclick = async (event) => {
+        const toggleButton = event.target.closest(".thread-reply-toggle");
+        if (toggleButton) {
+          const threadId = toggleButton.dataset.threadId;
+          const editor = document.querySelector(
+            `.reply-editor[data-thread-id="${escapeSelector(threadId)}"]`,
+          );
+          if (!editor) return;
+          editor.hidden = !editor.hidden;
+          if (!editor.hidden) {
+            const input = editor.querySelector(".thread-reply-input");
+            input?.focus();
+          }
+          return;
+        }
+
+        const submitButton = event.target.closest(".thread-reply-submit");
+        if (!submitButton) return;
+        if (!auth.currentUser) {
+          showToast("Log in to reply.");
+          return;
+        }
+
+        const threadId = submitButton.dataset.threadId;
+        const editor = document.querySelector(
+          `.reply-editor[data-thread-id="${escapeSelector(threadId)}"]`,
+        );
+        const replyInput = editor?.querySelector(".thread-reply-input");
+        const content = normalizeText(replyInput?.value, MAX_REPLY_LENGTH);
+
+        if (!content) {
+          showToast("Reply is empty or too long.");
+          return;
+        }
+
+        submitButton.disabled = true;
+        try {
+          await addDoc(postsCol, {
+            type: "reply",
+            parentId: threadId,
+            content,
+            username: normalizeText(auth.currentUser.displayName, 80) || "User",
+            photoURL: sanitizeAvatarUrl(auth.currentUser.photoURL, ""),
+            uid: auth.currentUser.uid,
+            createdAt: serverTimestamp(),
+          });
+          if (replyInput) replyInput.value = "";
+          if (editor) editor.hidden = true;
+        } catch {
+          showToast("Reply failed: Access denied.");
+        } finally {
+          submitButton.disabled = false;
+        }
+      };
+
+      ui.submitBug.onclick = async () => {
+        const bugTitle = normalizeText(ui.bugTitle.value, MAX_BUG_TITLE_LENGTH);
+        const bugDesc = normalizeText(ui.bugDesc.value, MAX_BUG_DESC_LENGTH);
         if (bugTitle && bugDesc && auth.currentUser) {
           try {
             await addDoc(bugsCol, {
@@ -371,8 +531,8 @@
               status: "open",
               createdAt: serverTimestamp(),
             });
-            t.value = "";
-            d.value = "";
+            ui.bugTitle.value = "";
+            ui.bugDesc.value = "";
             showToast("Bug logged. Happy hunting.");
           } catch (e) {
             showToast("Report failed: Access denied.");

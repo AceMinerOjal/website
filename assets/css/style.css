@@ -373,6 +373,55 @@ input::placeholder {
   text-align: left;
 }
 
+.thread-root {
+  text-align: left;
+}
+
+.thread-title {
+  margin: 0 0 0.6rem;
+  color: var(--green);
+  font-size: 1rem;
+}
+
+.thread-meta {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--subtext0);
+  font-size: 0.8rem;
+}
+
+.thread-replies {
+  margin-top: 1rem;
+  border-top: 1px solid var(--surface0);
+  padding-top: 0.75rem;
+}
+
+.thread-reply {
+  border: 1px solid var(--surface0);
+  border-radius: 10px;
+  background: rgba(137, 180, 250, 0.05);
+  padding: 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.thread-reply-header {
+  margin-bottom: 0.5rem;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.reply-editor {
+  margin-top: 0.9rem;
+  border-top: 1px dashed var(--surface0);
+  padding-top: 0.9rem;
+}
+
+.thread-reply-input {
+  min-height: 80px;
+}
+
 /* Forum Utilities */
 .search-wrapper {
   position: relative;
@@ -413,8 +462,10 @@ input::placeholder {
   color: var(--green);
 }
 
-#submit_post,
-#submit_bug {
+#submit_thread,
+#submit_bug,
+.thread-reply-submit,
+.thread-reply-toggle {
   background: var(--surface0);
   color: var(--green);
   border: 1px solid var(--green);
@@ -431,22 +482,28 @@ input::placeholder {
   overflow: hidden;
 }
 
-#submit_post:hover,
-#submit_bug:hover {
+#submit_thread:hover,
+#submit_bug:hover,
+.thread-reply-submit:hover,
+.thread-reply-toggle:hover {
   background: var(--green);
   color: var(--base);
   box-shadow: 0 0 20px rgba(166, 227, 161, 0.4);
   transform: translateY(-2px);
 }
 
-#submit_post:active,
-#submit_bug:active {
+#submit_thread:active,
+#submit_bug:active,
+.thread-reply-submit:active,
+.thread-reply-toggle:active {
   transform: translateY(1px) scale(0.98);
   box-shadow: 0 0 10px rgba(166, 227, 161, 0.2);
 }
 
-#submit_post:hover::after,
-#submit_bug:hover::after {
+#submit_thread:hover::after,
+#submit_bug:hover::after,
+.thread-reply-submit:hover::after,
+.thread-reply-toggle:hover::after {
   content: "";
   position: absolute;
   top: 0;
@@ -460,6 +517,11 @@ input::placeholder {
     transparent
   );
   animation: shine 1.5s infinite;
+}
+
+.thread-reply-toggle {
+  padding: 6px 14px;
+  font-size: 0.75rem;
 }
 
 @keyframes shine {
