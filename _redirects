@@ -1,9 +1,16 @@
 /apps.html /apps/ 301
 /downloads.html /downloads/ 301
 /hub.html /hub/ 301
-/forums/auth.html /forums/auth/ 301
+/auth.html /auth/ 301
+/forums/auth.html /auth/ 301
+/forums/auth/ /auth/ 301
 /webApps/dot-dat-plotter.html /web-apps/dot-dat-plotter/ 301
+/webApps/oxide_chat-FRONTEND.html /web-apps/oxide-chat/ 301
+/webApps/oxide-chat-frontend.html /web-apps/oxide-chat/ 301
+/webApps/oxide-chat.html /web-apps/oxide-chat/ 301
 /webApps/* /web-apps/:splat 301
+/Oxide_Chat-FRONTEND/* /web-apps/oxide-chat/:splat 301
+/web-apps/oxide-chat-frontend/* /web-apps/oxide-chat/:splat 301
 /download-files/example.dat /downloads/files/example.dat 301
 /style.css /assets/css/style.css 301
 /assets/firebase-config.js /assets/js/firebase-config.js 301

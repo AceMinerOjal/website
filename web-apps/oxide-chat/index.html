@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Oxide Chat</title>
+    <meta name="robots" content="index, follow" />
+    <meta name="google-adsense-account" content="ca-pub-9043552187427888" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9043552187427888"
+      crossorigin="anonymous"
+    ></script>
+    <link rel="stylesheet" href="/assets/css/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <link
+      rel="canonical"
+      href="https://www.ojalkhatiwada.com.np/web-apps/oxide-chat/"
+    />
+    <link rel="icon" type="image/jpeg" href="/favicon.ico" />
+  </head>
+  <body>
+    <div class="top-nav">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/apps/" class="nav-link active">Apps</a>
+      <a href="/downloads/" class="nav-link">Downloads</a>
+      <a href="/hub/" class="nav-link">Hub</a>
+    </div>
+
+    <main class="chat-card">
+      <h1>Oxide Chat</h1>
+      <p class="tagline chat-headline">
+        Encrypted room client powered by Firebase Auth + WebSockets
+      </p>
+
+      <section id="authPanel">
+        <p class="tagline">Sign in to start chatting</p>
+        <a id="loginLink" class="btn" href="/auth/?next=/web-apps/oxide-chat/">
+          <i class="fas fa-right-to-bracket"></i> Continue to Sign In
+        </a>
+      </section>
+
+      <section id="chatShell" class="chat-shell hidden">
+        <div class="chat-user-row">
+          <p id="userChip" class="chat-user-chip">Signed in</p>
+          <button id="logoutBtn" class="btn" type="button">
+            <i class="fas fa-right-from-bracket"></i> Logout
+          </button>
+        </div>
+
+        <div class="chat-controls">
+          <input
+            id="baseUrl"
+            type="text"
+            placeholder="ws://your-host:8787"
+            autocomplete="off"
+          />
+          <input
+            id="roomId"
+            type="text"
+            value="general"
+            placeholder="Room ID"
+            autocomplete="off"
+          />
+
+          <div class="chat-action-row">
+            <button id="connectBtn" class="btn row" type="button">
+              <i class="fas fa-plug"></i> Connect
+            </button>
+            <button
+              id="disconnectBtn"
+              class="btn row"
+              type="button"
+              disabled
+            >
+              <i class="fas fa-link-slash"></i> Disconnect
+            </button>
+          </div>
+
+          <p id="status" class="chat-status">Disconnected</p>
+        </div>
+
+        <ul id="messages" class="messages"></ul>
+
+        <form id="composer" class="chat-composer">
+          <input
+            id="messageInput"
+            type="text"
+            placeholder="Type encrypted payload..."
+            autocomplete="off"
+            disabled
+          />
+          <button class="btn row" type="submit">
+            <i class="fas fa-paper-plane"></i> Send
+          </button>
+        </form>
+      </section>
+
+      <p id="loginToast" class="toast"></p>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

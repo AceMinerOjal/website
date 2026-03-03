@@ -15,10 +15,7 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
     />
-    <link
-      rel="canonical"
-      href="https://www.ojalkhatiwada.com.np/forums/auth/"
-    />
+    <link rel="canonical" href="https://www.ojalkhatiwada.com.np/auth/" />
     <link rel="icon" type="image/jpeg" href="/favicon.ico" />
     <link rel="stylesheet" href="/assets/css/style.css" />
   </head>
@@ -76,13 +73,28 @@
         setTimeout(() => toast.classList.remove("show"), 3000);
       };
 
-      // Handle existing sessions
+      const getSafeNextPath = () => {
+        const requested = new URLSearchParams(window.location.search).get(
+          "next",
+        );
+        const fallback = "/hub/";
+        if (
+          !requested ||
+          !requested.startsWith("/") ||
+          requested.startsWith("//") ||
+          requested.startsWith("/auth")
+        ) {
+          return fallback;
+        }
+        return requested;
+      };
+      const nextPath = getSafeNextPath();
+
       onAuthStateChanged(auth, (user) => {
         if (user) {
           showToast(`Welcome back, ${user.displayName}`);
-          // Delay slightly so they can actually read the welcome message
           setTimeout(() => {
-            window.location.href = "/hub/";
+            window.location.href = nextPath;
           }, 800);
         }
       });
@@ -92,7 +104,6 @@
           const provider = new ProviderClass();
           provider.setCustomParameters({ prompt: "select_account" });
           await signInWithPopup(auth, provider);
-          // onAuthStateChanged will handle the redirect automatically
         } catch (err) {
           console.error("Auth error:", err?.code || "unknown");
           showToast("Authentication failed. Please try again.");
