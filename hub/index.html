@@ -172,6 +172,9 @@
 
       let allDiscussionDocs = [];
       let allBugs = [];
+      let selectedThreadId = new URLSearchParams(window.location.search).get(
+        "thread",
+      );
       const ui = {
         userDisplay: document.getElementById("user_display"),
         userAvatar: document.getElementById("user_avatar"),
@@ -188,6 +191,7 @@
         submitBug: document.getElementById("submit_bug"),
         bugsList: document.getElementById("bugs_list"),
         toast: document.getElementById("copy-toast"),
+        postEditor: document.getElementById("post_editor"),
       };
 
       const escapeHTML = (str) =>
@@ -219,6 +223,8 @@
         `https://ui-avatars.com/api/?name=${encodeURIComponent(name || "U")}&background=1e1e2e&color=${color}`;
       const escapeSelector = (value) =>
         window.CSS?.escape ? window.CSS.escape(value) : String(value);
+      const getSelectedThreadId = () =>
+        String(selectedThreadId || "").trim() || null;
 
       const sanitizeAvatarUrl = (rawValue, fallbackUrl) => {
         const raw = String(rawValue || "").trim();
@@ -248,6 +254,19 @@
         ui.toast.innerText = msg;
         ui.toast.classList.add("show");
         setTimeout(() => ui.toast.classList.remove("show"), 3000);
+      };
+
+      const setThreadRoute = (threadId) => {
+        const url = new URL(window.location.href);
+        if (threadId) {
+          url.searchParams.set("thread", threadId);
+          selectedThreadId = threadId;
+        } else {
+          url.searchParams.delete("thread");
+          selectedThreadId = null;
+        }
+        window.history.pushState({}, "", url);
+        filterAndRender();
       };
 
       const timestampToNumber = (value) => {
@@ -350,7 +369,7 @@
           </div>`;
       };
 
-      const renderThread = (thread, canReply) => {
+      const renderThread = (thread, canReply, isDetailView = false) => {
         const userPhoto = sanitizeAvatarUrl(
           thread.photoURL,
           getFallbackAvatar(thread.username, "89b4fa"),
@@ -358,8 +377,9 @@
         const threadTitle = normalizeText(thread.title, MAX_THREAD_TITLE_LENGTH);
         const replies = thread.replies.map(renderReply).join("");
         const threadId = escapeHTML(thread.id);
+        const threadClasses = `post-card thread-root${isDetailView ? "" : " thread-clickable"}`;
         return `
-          <article class="post-card thread-root" data-thread-id="${threadId}">
+          <article class="${threadClasses}" data-thread-id="${threadId}">
             <div class="post-header">
               <img src="${escapeHTML(userPhoto)}" class="avatar-sm">
               <strong style="color: var(--sky);">${escapeHTML(thread.username || "Unknown")}</strong>
@@ -392,9 +412,11 @@
           </div>`;
 
       const filterAndRender = () => {
+        const activeThreadId = getSelectedThreadId();
         const term = ui.globalSearch.value.toLowerCase();
         const canReply = Boolean(auth.currentUser);
-        const threads = buildThreadList(allDiscussionDocs).filter((thread) => {
+        const allThreads = buildThreadList(allDiscussionDocs);
+        const threads = allThreads.filter((thread) => {
           if (!term) return true;
           const rootMatches =
             (thread.title || "").toLowerCase().includes(term) ||
@@ -408,11 +430,26 @@
           );
         });
 
-        ui.postsList.innerHTML = threads.length
-          ? threads
-              .map((thread) => renderThread(thread, canReply))
-              .join("")
-          : '<p class="tagline">No threads found.</p>';
+        if (activeThreadId) {
+          const activeThread = allThreads.find((thread) => thread.id === activeThreadId);
+          ui.postEditor.style.display = "none";
+          ui.globalSearch.placeholder = "Thread view: go back to browse all threads.";
+          ui.postsList.innerHTML = activeThread
+            ? `<div class="thread-view-header">
+                 <a href="/hub/" class="thread-back-link" data-thread-back="1">Back to all threads</a>
+               </div>
+               ${renderThread(activeThread, canReply, true)}`
+            : `<div class="thread-view-header">
+                 <a href="/hub/" class="thread-back-link" data-thread-back="1">Back to all threads</a>
+               </div>
+               <p class="tagline">Thread not found.</p>`;
+        } else {
+          ui.postEditor.style.display = "";
+          ui.globalSearch.placeholder = "Search threads or bug IDs...";
+          ui.postsList.innerHTML = threads.length
+            ? threads.map((thread) => renderThread(thread, canReply)).join("")
+            : '<p class="tagline">No threads found.</p>';
+        }
 
         const fBugs = allBugs.filter(
           (b) =>
@@ -464,6 +501,13 @@
       };
 
       ui.postsList.onclick = async (event) => {
+        const backToListLink = event.target.closest(".thread-back-link");
+        if (backToListLink) {
+          event.preventDefault();
+          setThreadRoute(null);
+          return;
+        }
+
         const toggleButton = event.target.closest(".thread-reply-toggle");
         if (toggleButton) {
           const threadId = toggleButton.dataset.threadId;
@@ -480,41 +524,51 @@
         }
 
         const submitButton = event.target.closest(".thread-reply-submit");
-        if (!submitButton) return;
-        if (!auth.currentUser) {
-          showToast("Log in to reply.");
+        if (submitButton) {
+          if (!auth.currentUser) {
+            showToast("Log in to reply.");
+            return;
+          }
+
+          const threadId = submitButton.dataset.threadId;
+          const editor = document.querySelector(
+            `.reply-editor[data-thread-id="${escapeSelector(threadId)}"]`,
+          );
+          const replyInput = editor?.querySelector(".thread-reply-input");
+          const content = normalizeText(replyInput?.value, MAX_REPLY_LENGTH);
+
+          if (!content) {
+            showToast("Reply is empty or too long.");
+            return;
+          }
+
+          submitButton.disabled = true;
+          try {
+            await addDoc(postsCol, {
+              type: "reply",
+              parentId: threadId,
+              content,
+              username: normalizeText(auth.currentUser.displayName, 80) || "User",
+              photoURL: sanitizeAvatarUrl(auth.currentUser.photoURL, ""),
+              uid: auth.currentUser.uid,
+              createdAt: serverTimestamp(),
+            });
+            if (replyInput) replyInput.value = "";
+            if (editor) editor.hidden = true;
+          } catch {
+            showToast("Reply failed: Access denied.");
+          } finally {
+            submitButton.disabled = false;
+          }
           return;
         }
 
-        const threadId = submitButton.dataset.threadId;
-        const editor = document.querySelector(
-          `.reply-editor[data-thread-id="${escapeSelector(threadId)}"]`,
-        );
-        const replyInput = editor?.querySelector(".thread-reply-input");
-        const content = normalizeText(replyInput?.value, MAX_REPLY_LENGTH);
-
-        if (!content) {
-          showToast("Reply is empty or too long.");
-          return;
-        }
-
-        submitButton.disabled = true;
-        try {
-          await addDoc(postsCol, {
-            type: "reply",
-            parentId: threadId,
-            content,
-            username: normalizeText(auth.currentUser.displayName, 80) || "User",
-            photoURL: sanitizeAvatarUrl(auth.currentUser.photoURL, ""),
-            uid: auth.currentUser.uid,
-            createdAt: serverTimestamp(),
-          });
-          if (replyInput) replyInput.value = "";
-          if (editor) editor.hidden = true;
-        } catch {
-          showToast("Reply failed: Access denied.");
-        } finally {
-          submitButton.disabled = false;
+        const clickableThread = event.target.closest(".thread-clickable");
+        if (!clickableThread || getSelectedThreadId()) return;
+        if (event.target.closest("a, button, textarea, input, label")) return;
+        const threadId = clickableThread.dataset.threadId;
+        if (threadId) {
+          setThreadRoute(threadId);
         }
       };
 
@@ -543,6 +597,13 @@
           showToast("Log in to report bugs.");
         }
       };
+
+      window.addEventListener("popstate", () => {
+        selectedThreadId = new URLSearchParams(window.location.search).get(
+          "thread",
+        );
+        filterAndRender();
+      });
     </script>
   </body>
 </html>

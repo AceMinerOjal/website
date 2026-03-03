@@ -377,6 +377,10 @@ input::placeholder {
   text-align: left;
 }
 
+.thread-clickable {
+  cursor: pointer;
+}
+
 .thread-title {
   margin: 0 0 0.6rem;
   color: var(--green);
@@ -386,10 +390,12 @@ input::placeholder {
 .thread-meta {
   margin-top: 1rem;
   display: flex;
+  gap: 8px;
   justify-content: space-between;
   align-items: center;
   color: var(--subtext0);
   font-size: 0.8rem;
+  flex-wrap: wrap;
 }
 
 .thread-replies {
@@ -420,6 +426,23 @@ input::placeholder {
 
 .thread-reply-input {
   min-height: 80px;
+}
+
+.thread-view-header {
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.thread-back-link {
+  color: var(--sky);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.thread-back-link:hover {
+  color: var(--green);
+  text-decoration: underline;
 }
 
 /* Forum Utilities */
