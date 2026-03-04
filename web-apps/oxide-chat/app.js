@@ -70,6 +70,53 @@ function clearChatHistory() {
   messagesEl.replaceChildren();
 }
 
+function isPresenceJoinEvent(frame) {
+  return (
+    frame?.kind === "presence.join" && typeof frame?.sender_id === "string"
+  );
+}
+
+function isPresenceLeaveEvent(frame) {
+  return (
+    frame?.kind === "presence.leave" && typeof frame?.sender_id === "string"
+  );
+}
+
+function sendPresenceJoin(senderId) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  const event = {
+    kind: "presence.join",
+    sender_id: senderId,
+    avatar_url: profileAvatarUrl(currentUser),
+    created_at: Date.now(),
+  };
+  socket.send(JSON.stringify(event));
+}
+
+function appendSystemMessage(text) {
+  const li = document.createElement("li");
+  li.className = "message";
+
+  const content = document.createElement("div");
+  content.className = "message-content";
+
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  meta.textContent = "system";
+
+  const body = document.createElement("p");
+  body.className = "body";
+  body.textContent = text;
+
+  content.append(meta, body);
+  li.append(content);
+  messagesEl.appendChild(li);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
 function initialsFromLabel(value) {
   const source = (value || "User").trim();
   const parts = source.split(/\s+/).filter(Boolean);
@@ -224,7 +271,10 @@ function connect() {
     throw new Error("Please sign in first");
   }
   if (socket && socket.readyState === WebSocket.OPEN) {
-    setStatus(`Already connected to ${connectedRoomId || roomIdEl.value.trim()}`, "#89b4fa");
+    setStatus(
+      `Already connected to ${connectedRoomId || roomIdEl.value.trim()}`,
+      "#89b4fa",
+    );
     return;
   }
   if (socket && socket.readyState === WebSocket.CONNECTING) {
@@ -247,12 +297,29 @@ function connect() {
   socket.onopen = () => {
     setConnectedState(true);
     connectedRoomId = roomId;
+    sendPresenceJoin(senderId);
     setStatus(`Connected to ${roomId} as ${senderId}`, "#a6e3a1");
   };
 
   socket.onmessage = async (event) => {
     try {
       const incoming = await parseIncomingMessageData(event.data);
+      if (isPresenceJoinEvent(incoming)) {
+        if (incoming.sender_id !== senderId) {
+          appendSystemMessage(
+            `${incoming.sender_id} joined room ${connectedRoomId || roomId}`,
+          );
+        }
+        return;
+      }
+      if (isPresenceLeaveEvent(incoming)) {
+        if (incoming.sender_id !== senderId) {
+          appendSystemMessage(
+            `${incoming.sender_id} left room ${connectedRoomId || roomId}`,
+          );
+        }
+        return;
+      }
       if (incoming.sender_id && Array.isArray(incoming.payload_cipher)) {
         appendMessage(incoming, incoming.sender_id === senderId);
       }
@@ -283,7 +350,10 @@ function connect() {
   };
 }
 
-function disconnect(reconnect = false, closeReason = "Client closed connection") {
+function disconnect(
+  reconnect = false,
+  closeReason = "Client closed connection",
+) {
   reconnectAfterClose = reconnect;
   if (!socket) {
     setConnectedState(false);
@@ -328,7 +398,10 @@ function switchToSelectedRoom() {
     return;
   }
 
-  if (selectedRoom === connectedRoomId && socket.readyState === WebSocket.OPEN) {
+  if (
+    selectedRoom === connectedRoomId &&
+    socket.readyState === WebSocket.OPEN
+  ) {
     setStatus(`Already in room ${selectedRoom}`, "#89b4fa");
     return;
   }
@@ -418,3 +491,10 @@ composer.addEventListener("submit", (event) => {
 
 setConnectedState(false);
 setStatus("Please sign in to continue");
+
+window.addEventListener("beforeunload", () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  socket.close(1000, "Page unload");
+});
