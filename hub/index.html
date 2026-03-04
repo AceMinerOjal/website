@@ -20,35 +20,34 @@
     <link rel="icon" type="image/jpeg" href="/favicon.ico" />
   </head>
   <body>
-    <nav class="top-nav">
+    <div class="top-nav">
       <a href="/" class="nav-link">Home</a>
       <a href="/apps/" class="nav-link">Apps</a>
       <a href="/downloads/" class="nav-link">Downloads</a>
       <a href="/hub/" class="nav-link active">Hub</a>
-    </nav>
+    </div>
 
-    <main style="max-width: 600px !important">
-      <header style="margin-bottom: 1.5rem">
+    <main class="main-wide">
+      <header class="section-gap">
         <h1>Community Hub</h1>
         <div id="user_info">
-          <img id="user_avatar" class="profile-pic" style="display: none" />
-          <span
-            id="user_display"
-            style="color: var(--green); font-weight: 600"
-          ></span>
+          <img id="user_avatar" class="profile-pic" hidden />
+          <span id="user_display" class="hub-user-name"></span>
           <a
             id="loginBtn"
-            href="/auth/?next=/hub/"
-            class="tab-btn"
-            style="color: var(--sky); padding: 4px 8px; text-decoration: none"
+            href="/auth/"
+            class="tab-btn hub-action-link hub-action-login"
           >
             [login]
           </a>
-          <button
-            id="logoutBtn"
-            class="tab-btn"
-            style="color: var(--mauve); padding: 4px 8px"
+          <a
+            id="chatBtn"
+            href="/web-apps/oxide-chat/"
+            class="tab-btn hub-action-link hub-action-chat"
           >
+            [oxide chat]
+          </a>
+          <button id="logoutBtn" class="tab-btn hub-action-logout">
             [exit]
           </button>
         </div>
@@ -81,7 +80,7 @@
       </div>
 
       <section id="discussion" class="page active">
-        <div id="post_editor" style="margin-bottom: 2rem">
+        <div id="post_editor" class="editor-block">
           <input
             id="thread_title"
             type="text"
@@ -91,13 +90,11 @@
           <textarea
             id="thread_input"
             placeholder="Open a thread with context, question, or proposal..."
-            style="min-height: 120px; margin-top: 0.75rem"
+            class="field-thread"
           ></textarea>
-          <div
-            style="display: flex; justify-content: flex-end; margin-top: 1rem"
-          >
+          <div class="row-end">
             <button id="submit_thread">
-              <i class="fa-solid fa-paper-plane" style="margin-right: 8px"></i
+              <i class="fa-solid fa-paper-plane icon-gap"></i
               >Start Thread
             </button>
           </div>
@@ -109,7 +106,7 @@
       </section>
 
       <section id="bug-tracker" class="page">
-        <div class="grid" style="margin-bottom: 2rem">
+        <div class="grid editor-block">
           <input
             type="text"
             id="bug_title"
@@ -118,13 +115,11 @@
           <textarea
             id="bug_desc"
             placeholder="Steps to reproduce..."
-            style="min-height: 80px"
+            class="field-bug"
           ></textarea>
-          <div
-            style="display: flex; justify-content: flex-end; margin-top: 1rem"
-          >
+          <div class="row-end">
             <button id="submit_bug">
-              <i class="fa-solid fa-bug" style="margin-right: 8px"></i>Report
+              <i class="fa-solid fa-bug icon-gap"></i>Report
             </button>
           </div>
         </div>
@@ -169,6 +164,7 @@
         "avatars.githubusercontent.com",
         "ui-avatars.com",
       ]);
+      const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
       let allDiscussionDocs = [];
       let allBugs = [];
@@ -225,6 +221,17 @@
         window.CSS?.escape ? window.CSS.escape(value) : String(value);
       const getSelectedThreadId = () =>
         String(selectedThreadId || "").trim() || null;
+      const getSafeNextPath = (requested, fallback = "/hub/") => {
+        if (
+          !requested ||
+          !requested.startsWith("/") ||
+          requested.startsWith("//") ||
+          requested.startsWith("/auth")
+        ) {
+          return fallback;
+        }
+        return requested;
+      };
 
       const sanitizeAvatarUrl = (rawValue, fallbackUrl) => {
         const raw = String(rawValue || "").trim();
@@ -238,6 +245,8 @@
           return fallbackUrl;
         }
       };
+
+      ui.loginBtn.href = `/auth/?next=${encodeURIComponent(getSafeNextPath(returnPath))}`;
 
       window.showPage = (event, pageId) => {
         document
@@ -330,7 +339,7 @@
       onAuthStateChanged(auth, (user) => {
         if (!user) {
           ui.userDisplay.textContent = "Guest";
-          ui.userAvatar.style.display = "none";
+          ui.userAvatar.hidden = true;
           ui.loginBtn.style.display = "inline-flex";
           ui.logoutBtn.style.display = "none";
           setComposerState(false);
@@ -343,7 +352,7 @@
           user.photoURL,
           getFallbackAvatar(user.displayName, "a6e3a1"),
         );
-        ui.userAvatar.style.display = "block";
+        ui.userAvatar.hidden = false;
         ui.loginBtn.style.display = "none";
         ui.logoutBtn.style.display = "inline-flex";
         setComposerState(true);
@@ -362,8 +371,8 @@
           <div class="thread-reply">
             <div class="post-header thread-reply-header">
               <img src="${escapeHTML(replyPhoto)}" class="avatar-sm">
-              <strong style="color: var(--teal);">${escapeHTML(reply.username || "Unknown")}</strong>
-              <small style="margin-left: auto; color: var(--subtext0);">${safeDate(reply.createdAt)}</small>
+              <strong class="author-name-reply">${escapeHTML(reply.username || "Unknown")}</strong>
+              <small class="meta-time">${safeDate(reply.createdAt)}</small>
             </div>
             <div class="post-content">${escapeHTML(reply.content)}</div>
           </div>`;
@@ -382,8 +391,8 @@
           <article class="${threadClasses}" data-thread-id="${threadId}">
             <div class="post-header">
               <img src="${escapeHTML(userPhoto)}" class="avatar-sm">
-              <strong style="color: var(--sky);">${escapeHTML(thread.username || "Unknown")}</strong>
-              <small style="margin-left: auto; color: var(--subtext0);">${safeDate(thread.createdAt)}</small>
+              <strong class="author-name-thread">${escapeHTML(thread.username || "Unknown")}</strong>
+              <small class="meta-time">${safeDate(thread.createdAt)}</small>
             </div>
             <h3 class="thread-title">${escapeHTML(threadTitle || "Untitled Thread")}</h3>
             <div class="post-content">${escapeHTML(thread.content || "")}</div>
@@ -394,7 +403,7 @@
             <div class="thread-replies">${replies || '<p class="tagline">No replies yet.</p>'}</div>
             <div class="reply-editor" data-thread-id="${threadId}" hidden>
               <textarea class="thread-reply-input" placeholder="${canReply ? "Reply to this thread..." : "Log in to reply."}" ${canReply ? "" : "disabled"}></textarea>
-              <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem">
+              <div class="reply-actions">
                 <button type="button" class="thread-reply-submit" data-thread-id="${threadId}" ${canReply ? "" : "disabled"}>Send Reply</button>
               </div>
             </div>
@@ -403,12 +412,12 @@
 
       const renderBug = (bug) => `
           <div class="post-card bug">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="bug-header">
               <span class="bug-id">#BUG-${bug.id.substring(0, 6).toUpperCase()}</span>
               <span class="status-badge">${(bug.status || "open").toUpperCase()}</span>
             </div>
-            <h3 style="margin: 10px 0 5px 0; font-size: 1rem; color: var(--text);">${escapeHTML(bug.title)}</h3>
-            <p style="font-size: 0.85rem; color: var(--subtext0);">${escapeHTML(bug.description)}</p>
+            <h3 class="bug-title">${escapeHTML(bug.title)}</h3>
+            <p class="bug-desc">${escapeHTML(bug.description)}</p>
           </div>`;
 
       const filterAndRender = () => {

@@ -20,25 +20,18 @@
     <link rel="stylesheet" href="/assets/css/style.css" />
   </head>
   <body>
-    <nav class="top-nav">
+    <div class="top-nav">
       <a href="/" class="nav-link">Home</a>
       <a href="/apps/" class="nav-link">Apps</a>
       <a href="/downloads/" class="nav-link">Downloads</a>
-      <a href="/hub/" class="nav-link active">Hub</a>
-    </nav>
+      <a href="/hub/" class="nav-link">Hub</a>
+    </div>
 
-    <main style="max-width: 420px">
-      <h2 style="margin-bottom: 0.5rem">Join the Discussion</h2>
+    <main>
+      <h2 class="auth-title">Join the Discussion</h2>
       <p class="tagline">Sign in to access the inner sanctum</p>
 
-      <div
-        style="
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          margin-top: 2rem;
-        "
-      >
+      <div class="auth-actions">
         <button id="googleBtn" class="item-card">
           <i class="fa-brands fa-google"></i> Google
         </button>
@@ -66,6 +59,7 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const toast = document.getElementById("loginToast");
+      let hasRedirected = false;
 
       const showToast = (message) => {
         toast.textContent = message;
@@ -91,8 +85,10 @@
       const nextPath = getSafeNextPath();
 
       onAuthStateChanged(auth, (user) => {
-        if (user) {
-          showToast(`Welcome back, ${user.displayName}`);
+        if (user && !hasRedirected) {
+          hasRedirected = true;
+          const displayName = user.displayName || user.email || "friend";
+          showToast(`Welcome back, ${displayName}`);
           setTimeout(() => {
             window.location.href = nextPath;
           }, 800);

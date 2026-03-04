@@ -11,6 +11,9 @@ const chatShellEl = document.getElementById("chatShell");
 const loginLinkEl = document.getElementById("loginLink");
 const logoutBtn = document.getElementById("logoutBtn");
 const userChipEl = document.getElementById("userChip");
+const userEmailEl = document.getElementById("userEmail");
+const userUidEl = document.getElementById("userUid");
+const profileAvatarEl = document.getElementById("profileAvatar");
 const toastEl = document.getElementById("loginToast");
 const statusEl = document.getElementById("status");
 const messagesEl = document.getElementById("messages");
@@ -47,9 +50,59 @@ function setStatus(text, color = "#cdd6f4") {
   statusEl.style.color = color;
 }
 
-function appendMessage({ sender_id, payload_cipher, created_at }, isLocal = false) {
+function initialsFromLabel(value) {
+  const source = (value || "User").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
+function avatarFallbackDataUrl(label) {
+  const initials = initialsFromLabel(label);
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#a6e3a1"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#g)"/>
+  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-size="34" font-family="sans-serif" font-weight="700" fill="#1e1e2e">${initials}</text>
+</svg>`.trim();
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function profileAvatarUrl(user) {
+  if (user?.photoURL && user.photoURL.trim()) {
+    return user.photoURL;
+  }
+  return avatarFallbackDataUrl(user?.displayName || user?.email || "User");
+}
+
+function messageAvatarUrl(message) {
+  if (message?.avatar_url && message.avatar_url.trim()) {
+    return message.avatar_url;
+  }
+  return avatarFallbackDataUrl(message?.sender_id || "User");
+}
+
+function appendMessage(
+  { sender_id, payload_cipher, created_at, avatar_url },
+  isLocal = false,
+) {
   const li = document.createElement("li");
   li.className = `message ${isLocal ? "me" : ""}`;
+
+  const avatar = document.createElement("img");
+  avatar.className = "message-avatar";
+  avatar.src = messageAvatarUrl({ avatar_url, sender_id });
+  avatar.alt = `${sender_id || "User"} avatar`;
+
+  const content = document.createElement("div");
+  content.className = "message-content";
 
   const meta = document.createElement("p");
   meta.className = "meta";
@@ -60,7 +113,8 @@ function appendMessage({ sender_id, payload_cipher, created_at }, isLocal = fals
   body.className = "body";
   body.textContent = decodeUtf8(payload_cipher) ?? toHex(payload_cipher);
 
-  li.append(meta, body);
+  content.append(meta, body);
+  li.append(avatar, content);
   messagesEl.appendChild(li);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -119,13 +173,23 @@ function setAuthUi(user) {
   if (user) {
     authPanelEl.classList.add("hidden");
     chatShellEl.classList.remove("hidden");
-    userChipEl.textContent = `Signed in as ${user.displayName || user.email || user.uid}`;
+    const primary = user.displayName || user.email || user.uid;
+    userChipEl.textContent = primary;
+    userEmailEl.textContent = user.email || "No email available";
+    userUidEl.textContent = `UID ${user.uid.slice(0, 8)}`;
+    profileAvatarEl.src = profileAvatarUrl(user);
+    profileAvatarEl.alt = `${primary} avatar`;
     setStatus(`Ready. Sender ID: ${senderIdFor(user)}`);
     return;
   }
 
   authPanelEl.classList.remove("hidden");
   chatShellEl.classList.add("hidden");
+  userChipEl.textContent = "Signed in";
+  userEmailEl.textContent = "No email available";
+  userUidEl.textContent = "UID";
+  profileAvatarEl.src = avatarFallbackDataUrl("User");
+  profileAvatarEl.alt = "Signed in user avatar";
 }
 
 function connect() {
@@ -172,7 +236,21 @@ function connect() {
 }
 
 function disconnect() {
-  if (socket) {
+  if (!socket) {
+    return;
+  }
+
+  if (
+    socket.readyState === WebSocket.OPEN ||
+    socket.readyState === WebSocket.CONNECTING
+  ) {
+    setStatus("Disconnecting...", "#f9e2af");
+    disconnectBtn.disabled = true;
+    connectBtn.disabled = true;
+    messageInputEl.disabled = true;
+  }
+
+  if (socket.readyState !== WebSocket.CLOSED) {
     socket.close(1000, "Client closed connection");
   }
 }
@@ -188,6 +266,7 @@ function sendMessage(text) {
   const senderId = senderIdFor(currentUser);
   const message = {
     sender_id: senderId,
+    avatar_url: profileAvatarUrl(currentUser),
     payload_cipher: toCipherBytes(text),
     created_at: Date.now(),
   };

@@ -41,11 +41,28 @@
         <a id="loginLink" class="btn" href="/auth/?next=/web-apps/oxide-chat/">
           <i class="fas fa-right-to-bracket"></i> Continue to Sign In
         </a>
+        <p class="tagline chat-alt-link">
+          Or join the
+          <a href="/hub/" class="chat-link-sky">Community Hub</a>
+          first.
+        </p>
       </section>
 
       <section id="chatShell" class="chat-shell hidden">
         <div class="chat-user-row">
-          <p id="userChip" class="chat-user-chip">Signed in</p>
+          <div class="profile">
+            <img
+              id="profileAvatar"
+              class="profile-avatar"
+              src=""
+              alt="Signed in user avatar"
+            />
+            <div class="profile-meta">
+              <p id="userChip" class="chat-user-chip">Signed in</p>
+              <p id="userEmail" class="chat-user-id">No email available</p>
+              <p id="userUid" class="chat-user-id">UID</p>
+            </div>
+          </div>
           <button id="logoutBtn" class="btn" type="button">
             <i class="fas fa-right-from-bracket"></i> Logout
           </button>
