@@ -859,18 +859,59 @@ input::placeholder {
   margin-top: 80px;
 }
 
-.chat-auth-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
-  gap: 0.75rem;
-}
-
 .chat-card .btn {
   border: 1px solid transparent;
 }
 
+.chat-action-row .btn {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#connectBtn {
+  border-color: rgba(166, 227, 161, 0.55);
+  background: rgba(166, 227, 161, 0.1);
+}
+
+#connectBtn:hover:not(:disabled) {
+  background: rgba(166, 227, 161, 0.2);
+  border-color: var(--green);
+  color: var(--green);
+  transform: translateY(-1px);
+}
+
+#connectBtn.is-connected {
+  border-color: rgba(137, 220, 235, 0.55);
+  background: rgba(137, 220, 235, 0.12);
+  color: var(--sky);
+}
+
+#connectBtn.is-connected:hover:not(:disabled) {
+  border-color: var(--sky);
+  background: rgba(137, 220, 235, 0.2);
+}
+
+#disconnectBtn {
+  border-color: rgba(203, 166, 247, 0.55);
+  background: rgba(203, 166, 247, 0.1);
+}
+
+#disconnectBtn:hover:not(:disabled) {
+  background: rgba(203, 166, 247, 0.2);
+  border-color: var(--mauve);
+  color: var(--mauve);
+  transform: translateY(-1px);
+}
+
 .chat-card .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
+  box-shadow: none;
+  transform: none;
+  filter: grayscale(0.2);
   cursor: not-allowed;
 }
 
@@ -1027,7 +1068,6 @@ input::placeholder {
 }
 
 @media (max-width: 720px) {
-  .chat-auth-grid,
   .chat-action-row {
     grid-template-columns: 1fr;
   }

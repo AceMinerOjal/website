@@ -29,6 +29,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 let currentUser = null;
 let socket = null;
+let connectedRoomId = "";
+let reconnectAfterClose = false;
 const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 loginLinkEl.href = `/auth/?next=${encodeURIComponent(returnPath)}`;
 
@@ -42,12 +44,30 @@ function senderIdFor(user) {
   if (!user) {
     throw new Error("Authentication required");
   }
-  return user.displayName?.trim() || `user-${user.uid.slice(0, 8)}`;
+  const uidShort = user.uid.slice(0, 8);
+  const label = user.displayName?.trim() || user.email?.trim() || "user";
+  return `${label} [${uidShort}]`;
 }
 
 function setStatus(text, color = "#cdd6f4") {
   statusEl.textContent = text;
   statusEl.style.color = color;
+}
+
+function handleAction(action) {
+  try {
+    action();
+  } catch (error) {
+    setStatus(error.message, "#f38ba8");
+  }
+}
+
+function setButtonContent(button, iconClass, label) {
+  button.innerHTML = `<i class="${iconClass}"></i> ${label}`;
+}
+
+function clearChatHistory() {
+  messagesEl.replaceChildren();
 }
 
 function initialsFromLabel(value) {
@@ -164,9 +184,16 @@ function buildRoomSocketUrl() {
 }
 
 function setConnectedState(connected) {
-  connectBtn.disabled = connected;
+  connectBtn.disabled = false;
   disconnectBtn.disabled = !connected;
   messageInputEl.disabled = !connected;
+  connectBtn.classList.toggle("is-connected", connected);
+  setButtonContent(
+    connectBtn,
+    connected ? "fas fa-right-left" : "fas fa-plug",
+    connected ? "Switch Room" : "Connect",
+  );
+  setButtonContent(disconnectBtn, "fas fa-link-slash", "Disconnect");
 }
 
 function setAuthUi(user) {
@@ -176,7 +203,7 @@ function setAuthUi(user) {
     const primary = user.displayName || user.email || user.uid;
     userChipEl.textContent = primary;
     userEmailEl.textContent = user.email || "No email available";
-    userUidEl.textContent = `UID ${user.uid.slice(0, 8)}`;
+    userUidEl.textContent = `[${user.uid.slice(0, 8)}]`;
     profileAvatarEl.src = profileAvatarUrl(user);
     profileAvatarEl.alt = `${primary} avatar`;
     setStatus(`Ready. Sender ID: ${senderIdFor(user)}`);
@@ -187,7 +214,7 @@ function setAuthUi(user) {
   chatShellEl.classList.add("hidden");
   userChipEl.textContent = "Signed in";
   userEmailEl.textContent = "No email available";
-  userUidEl.textContent = "UID";
+  userUidEl.textContent = "[UID]";
   profileAvatarEl.src = avatarFallbackDataUrl("User");
   profileAvatarEl.alt = "Signed in user avatar";
 }
@@ -197,11 +224,21 @@ function connect() {
     throw new Error("Please sign in first");
   }
   if (socket && socket.readyState === WebSocket.OPEN) {
+    setStatus(`Already connected to ${connectedRoomId || roomIdEl.value.trim()}`, "#89b4fa");
+    return;
+  }
+  if (socket && socket.readyState === WebSocket.CONNECTING) {
+    setStatus("Still connecting...", "#89b4fa");
     return;
   }
 
+  const roomId = roomIdEl.value.trim();
   const wsUrl = buildRoomSocketUrl();
   const senderId = senderIdFor(currentUser);
+  connectBtn.disabled = true;
+  disconnectBtn.disabled = false;
+  messageInputEl.disabled = true;
+  setButtonContent(connectBtn, "fas fa-spinner fa-spin", "Connecting...");
   socket = new WebSocket(wsUrl);
   socket.binaryType = "arraybuffer";
 
@@ -209,7 +246,8 @@ function connect() {
 
   socket.onopen = () => {
     setConnectedState(true);
-    setStatus(`Connected as ${senderId}`, "#a6e3a1");
+    connectedRoomId = roomId;
+    setStatus(`Connected to ${roomId} as ${senderId}`, "#a6e3a1");
   };
 
   socket.onmessage = async (event) => {
@@ -228,15 +266,32 @@ function connect() {
   };
 
   socket.onclose = (event) => {
+    const shouldReconnect = reconnectAfterClose;
+    reconnectAfterClose = false;
+    connectedRoomId = "";
     setConnectedState(false);
+    clearChatHistory();
+    socket = null;
+
+    if (shouldReconnect) {
+      handleAction(connect);
+      return;
+    }
+
     const reason = event.reason ? ` (${event.reason})` : "";
     setStatus(`Disconnected [${event.code}]${reason}`, "#cdd6f4");
-    socket = null;
   };
 }
 
-function disconnect() {
+function disconnect(reconnect = false, closeReason = "Client closed connection") {
+  reconnectAfterClose = reconnect;
   if (!socket) {
+    setConnectedState(false);
+    if (!reconnect) {
+      clearChatHistory();
+      setStatus("Already disconnected", "#89b4fa");
+    }
+    connectedRoomId = "";
     return;
   }
 
@@ -244,15 +299,42 @@ function disconnect() {
     socket.readyState === WebSocket.OPEN ||
     socket.readyState === WebSocket.CONNECTING
   ) {
-    setStatus("Disconnecting...", "#f9e2af");
+    setStatus(reconnect ? "Switching rooms..." : "Disconnecting...", "#f9e2af");
     disconnectBtn.disabled = true;
     connectBtn.disabled = true;
     messageInputEl.disabled = true;
+    setButtonContent(
+      reconnect ? connectBtn : disconnectBtn,
+      "fas fa-spinner fa-spin",
+      reconnect ? "Switching..." : "Disconnecting...",
+    );
   }
 
   if (socket.readyState !== WebSocket.CLOSED) {
-    socket.close(1000, "Client closed connection");
+    socket.close(1000, closeReason);
   }
+}
+
+function switchToSelectedRoom() {
+  const selectedRoom = roomIdEl.value.trim();
+  if (!selectedRoom) {
+    throw new Error("Room ID is required");
+  }
+  buildRoomSocketUrl();
+
+  if (!socket || socket.readyState === WebSocket.CLOSED) {
+    clearChatHistory();
+    connect();
+    return;
+  }
+
+  if (selectedRoom === connectedRoomId && socket.readyState === WebSocket.OPEN) {
+    setStatus(`Already in room ${selectedRoom}`, "#89b4fa");
+    return;
+  }
+
+  clearChatHistory();
+  disconnect(true, "Switching room");
 }
 
 function sendMessage(text) {
@@ -295,20 +377,30 @@ onAuthStateChanged(auth, (user) => {
   }
 
   disconnect();
-  setConnectedState(false);
   setAuthUi(null);
 });
 
 connectBtn.addEventListener("click", () => {
-  try {
-    connect();
-  } catch (error) {
-    setStatus(error.message, "#f38ba8");
-  }
+  handleAction(switchToSelectedRoom);
 });
 
 disconnectBtn.addEventListener("click", () => {
   disconnect();
+});
+
+roomIdEl.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") {
+    return;
+  }
+  event.preventDefault();
+  handleAction(switchToSelectedRoom);
+});
+
+roomIdEl.addEventListener("change", () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  handleAction(switchToSelectedRoom);
 });
 
 composer.addEventListener("submit", (event) => {
@@ -318,12 +410,10 @@ composer.addEventListener("submit", (event) => {
     return;
   }
 
-  try {
+  handleAction(() => {
     sendMessage(text);
     messageInputEl.value = "";
-  } catch (error) {
-    setStatus(error.message, "#f38ba8");
-  }
+  });
 });
 
 setConnectedState(false);
