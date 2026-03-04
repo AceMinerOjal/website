@@ -42,6 +42,7 @@ temp/
 *.p12
 *.crt
 firebase-config.js
+!assets/js/firebase-config.js
 
 # Local tool state
 .firebase/
