@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /auth/
-Sitemap: https://www.ojalkhatiwada.com.np/sitemap.xml
+Sitemap: https://ojalkhatiwada.com.np/sitemap.xml
